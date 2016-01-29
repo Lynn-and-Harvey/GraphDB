@@ -1,0 +1,311 @@
+= NBA Playoff Prediction
+
+== Introduction
+Every year the postseason tournament of NBA attracts billions of audiences across the world and dollars as well. Gambling companies have their own secret algorithms to calculate the betting rates of each game. A team with a good track of winning would certainly have a better chance to win. But how about teams with mixed histories? I am not a gambler, but I am interested in the algorithms behind.
+
+== Problem
+Typically to determine the winning rate between two teams, you could look at their historical matches against each other: total wins and total losses; but what if the two teams had never played together before or, more likely, had never played in the recent a few years, especially during the NBA finals when one is from the east and the other is from the west? One way to compare is to calculate their winning percentages: (total wins) / (total games played). However, the winning percentages may not be very comparable considering each team mostly (or sometimes exclusively) played against teams from their own conference.
+
+== Solution
+With the _Path_ concept in graph databases, not only the traditional statistics could be easily calculated but also new methods could be introduced to link any two teams together through the chain of playoffs.
+If we consider two teams that had played against each other as _linked_ and this link relationship can be _relayed_, then all teams that had entered a certain year's postseason tournament were _linked_, either directly or indirectly; or all teams that in NBA playoffs are _linked_ if we combine multiple year's playoffs together.
+Based on the links, shortest paths can be leveraged to find the closest relationship between any two teams. And if we assign numeric values to those links, any two teams could be compared using measurable mechanism.
+
+== Data Model
+* Each NBA team is a node [30 nodes in total]
+* Each playoff round (not a single match but the entire round) is a node [15 rounds per year]
+* The results of each playoff round will be stored in edges; the direction of each edge will be from a Team to a Round, and the number of wins will be stored in that edge [0,1,2,3,4]
+
+image::https://photos-2.dropbox.com/t/2/AACRRNdkAzM7NkPasfDsmqYaAUIrZP32VuJjq4oGaiAUaQ/12/530554565/png/32x32/3/1454068800/0/2/nbaplayoff_graphdb.PNG/EPHkq58EGAUgAigC/KYyVa3rnjsHVWuKpS_kMVzDIQTTWXJmac8zt57_g2GU?size_mode=5&size=32x32[]
+
+
+//setup
+== Setup
+The setup code will load 2013, 2014 and 2015 NBA playoffs results to the graph database as sample data.
+//hide
+[source,cypher]
+----
+//<--start of creation-->
+//create nba TEAM nodes
+CREATE (BOS:Team:E{Name: "Boston", Division: "Atlantic", FullName: "Boston Celtics"})
+CREATE (BKN:Team:E{Name: "Brooklyn", Division: "Atlantic", FullName: "Brooklyn Nets"})
+CREATE (NYK:Team:E{Name: "New York", Division: "Atlantic", FullName: "New York Knicks"})
+CREATE (PHI:Team:E{Name: "Philadelphia", Division: "Atlantic", FullName: "Philadelphia 76ers"})
+CREATE (TOR:Team:E{Name: "Toronto", Division: "Atlantic", FullName: "Toronto Raptors"})
+CREATE (CHI:Team:E{Name: "Chicago", Division: "Central", FullName: "Chicago Bulls"})
+CREATE (CLE:Team:E{Name: "Cleveland", Division: "Central", FullName: "Cleveland Cavaliers"})
+CREATE (DET:Team:E{Name: "Detroit", Division: "Central", FullName: "Detroit Pistons"})
+CREATE (IND:Team:E{Name: "Indiana", Division: "Central", FullName: "Indiana Pacers"})
+CREATE (MIL:Team:E{Name: "Milwaukee", Division: "Central", FullName: "Milwaukee Bucks"})
+CREATE (ATL:Team:E{Name: "Atlanta", Division: "Southeast", FullName: "Atlanta Hawks"})
+CREATE (CHA:Team:E{Name: "Charlotte", Division: "Southeast", FullName: "Charlotte Hornets"})
+CREATE (MIA:Team:E{Name: "Miami", Division: "Southeast", FullName: "Miami Heat"})
+CREATE (ORL:Team:E{Name: "Orlando", Division: "Southeast", FullName: "Orlando Magic"})
+CREATE (WAS:Team:E{Name: "Washington", Division: "Southeast", FullName: "Washington Wizards"})
+CREATE (DEN:Team:W{Name: "Denver", Division: "Northwest", FullName: "Denver Nuggets"})
+CREATE (MIN:Team:W{Name: "Minnesota", Division: "Northwest", FullName: "Minnesota Timberwolves"})
+CREATE (OKC:Team:W{Name: "Oklahoma City", Division: "Northwest", FullName: "Oklahoma City Thunder"})
+CREATE (POR:Team:W{Name: "Portland", Division: "Northwest", FullName: "Portland Trailblazers"})
+CREATE (UTA:Team:W{Name: "Utah", Division: "Northwest", FullName: "Utah Jazz"})
+CREATE (GS:Team:W{Name: "Golden State", Division: "Pacific", FullName: "Golden State Warriors"})
+CREATE (LAC:Team:W{Name: "L.A. Clippers", Division: "Pacific", FullName: "Los Angeles Clippers"})
+CREATE (LAL:Team:W{Name: "L.A. Lakers", Division: "Pacific", FullName: "Los Angeles Lakers"})
+CREATE (PHX:Team:W{Name: "Phoenix", Division: "Pacific", FullName: "Phoenix Suns"})
+CREATE (SAC:Team:W{Name: "Sacramento", Division: "Pacific", FullName: "Sacramento Kings"})
+CREATE (DAL:Team:W{Name: "Dallas", Division: "Southwest", FullName: "Dallas Mavericks"})
+CREATE (HOU:Team:W{Name: "Houston", Division: "Southwest", FullName: "Houston Rockets"})
+CREATE (MEM:Team:W{Name: "Memphis", Division: "Southwest", FullName: "Memphis Grizzlies"})
+CREATE (NOP:Team:W{Name: "New Orleans", Division: "Southwest", FullName: "New Orleans Pelicans"})
+CREATE (SA:Team:W{Name: "San Antonio", Division: "Southwest", FullName: "San Antonio Spurs"})
+
+//create PLAYOFF nodes
+CREATE (P201501:Playoff{Name: "P201501", Year: "2015", Round: "First Round"})
+CREATE (P201502:Playoff{Name: "P201502", Year: "2015", Round: "First Round"})
+CREATE (P201503:Playoff{Name: "P201503", Year: "2015", Round: "First Round"})
+CREATE (P201504:Playoff{Name: "P201504", Year: "2015", Round: "First Round"})
+CREATE (P201505:Playoff{Name: "P201505", Year: "2015", Round: "First Round"})
+CREATE (P201506:Playoff{Name: "P201506", Year: "2015", Round: "First Round"})
+CREATE (P201507:Playoff{Name: "P201507", Year: "2015", Round: "First Round"})
+CREATE (P201508:Playoff{Name: "P201508", Year: "2015", Round: "First Round"})
+CREATE (P201509:Playoff{Name: "P201509", Year: "2015", Round: "Conference Semifinals"})
+CREATE (P201510:Playoff{Name: "P201510", Year: "2015", Round: "Conference Semifinals"})
+CREATE (P201511:Playoff{Name: "P201511", Year: "2015", Round: "Conference Semifinals"})
+CREATE (P201512:Playoff{Name: "P201512", Year: "2015", Round: "Conference Semifinals"})
+CREATE (P201513:Playoff{Name: "P201513", Year: "2015", Round: "Conference Finals"})
+CREATE (P201514:Playoff{Name: "P201514", Year: "2015", Round: "Conference Finals"})
+CREATE (P201515:Playoff:F{Name: "P201515", Year: "2015", Round: "NBA Finals"})
+CREATE (P201401:Playoff{Name: "P201401", Year: "2014", Round: "First Round"})
+CREATE (P201402:Playoff{Name: "P201402", Year: "2014", Round: "First Round"})
+CREATE (P201403:Playoff{Name: "P201403", Year: "2014", Round: "First Round"})
+CREATE (P201404:Playoff{Name: "P201404", Year: "2014", Round: "First Round"})
+CREATE (P201405:Playoff{Name: "P201405", Year: "2014", Round: "First Round"})
+CREATE (P201406:Playoff{Name: "P201406", Year: "2014", Round: "First Round"})
+CREATE (P201407:Playoff{Name: "P201407", Year: "2014", Round: "First Round"})
+CREATE (P201408:Playoff{Name: "P201408", Year: "2014", Round: "First Round"})
+CREATE (P201409:Playoff{Name: "P201409", Year: "2014", Round: "Conference Semifinals"})
+CREATE (P201410:Playoff{Name: "P201410", Year: "2014", Round: "Conference Semifinals"})
+CREATE (P201411:Playoff{Name: "P201411", Year: "2014", Round: "Conference Semifinals"})
+CREATE (P201412:Playoff{Name: "P201412", Year: "2014", Round: "Conference Semifinals"})
+CREATE (P201413:Playoff{Name: "P201413", Year: "2014", Round: "Conference Finals"})
+CREATE (P201414:Playoff{Name: "P201414", Year: "2014", Round: "Conference Finals"})
+CREATE (P201415:Playoff:F{Name: "P201415", Year: "2014", Round: "NBA Finals"})
+CREATE (P201301:Playoff{Name: "P201301", Year: "2013", Round: "First Round"})
+CREATE (P201302:Playoff{Name: "P201302", Year: "2013", Round: "First Round"})
+CREATE (P201303:Playoff{Name: "P201303", Year: "2013", Round: "First Round"})
+CREATE (P201304:Playoff{Name: "P201304", Year: "2013", Round: "First Round"})
+CREATE (P201305:Playoff{Name: "P201305", Year: "2013", Round: "First Round"})
+CREATE (P201306:Playoff{Name: "P201306", Year: "2013", Round: "First Round"})
+CREATE (P201307:Playoff{Name: "P201307", Year: "2013", Round: "First Round"})
+CREATE (P201308:Playoff{Name: "P201308", Year: "2013", Round: "First Round"})
+CREATE (P201309:Playoff{Name: "P201309", Year: "2013", Round: "Conference Semifinals"})
+CREATE (P201310:Playoff{Name: "P201310", Year: "2013", Round: "Conference Semifinals"})
+CREATE (P201311:Playoff{Name: "P201311", Year: "2013", Round: "Conference Semifinals"})
+CREATE (P201312:Playoff{Name: "P201312", Year: "2013", Round: "Conference Semifinals"})
+CREATE (P201313:Playoff{Name: "P201313", Year: "2013", Round: "Conference Finals"})
+CREATE (P201314:Playoff{Name: "P201314", Year: "2013", Round: "Conference Finals"})
+CREATE (P201315:Playoff:F{Name: "P201315", Year: "2013", Round: "NBA Finals"})
+
+//creae PLAYOFF relationships between teams
+CREATE (ATL)-[:WIN{Win:4}]->(P201501)
+CREATE (BKN)-[:WIN{Win:2}]->(P201501)
+CREATE (TOR)-[:WIN{Win:0}]->(P201502)
+CREATE (WAS)-[:WIN{Win:4}]->(P201502)
+CREATE (CHI)-[:WIN{Win:4}]->(P201503)
+CREATE (MIL)-[:WIN{Win:2}]->(P201503)
+CREATE (CLE)-[:WIN{Win:4}]->(P201504)
+CREATE (BOS)-[:WIN{Win:0}]->(P201504)
+CREATE (GS)-[:WIN{Win:4}]->(P201505)
+CREATE (NOP)-[:WIN{Win:0}]->(P201505)
+CREATE (POR)-[:WIN{Win:1}]->(P201506)
+CREATE (MEM)-[:WIN{Win:4}]->(P201506)
+CREATE (LAC)-[:WIN{Win:4}]->(P201507)
+CREATE (SA)-[:WIN{Win:3}]->(P201507)
+CREATE (HOU)-[:WIN{Win:4}]->(P201508)
+CREATE (DAL)-[:WIN{Win:1}]->(P201508)
+CREATE (ATL)-[:WIN{Win:4}]->(P201509)
+CREATE (WAS)-[:WIN{Win:2}]->(P201509)
+CREATE (CHI)-[:WIN{Win:2}]->(P201510)
+CREATE (CLE)-[:WIN{Win:4}]->(P201510)
+CREATE (GS)-[:WIN{Win:4}]->(P201511)
+CREATE (MEM)-[:WIN{Win:2}]->(P201511)
+CREATE (LAC)-[:WIN{Win:3}]->(P201512)
+CREATE (HOU)-[:WIN{Win:4}]->(P201512)
+CREATE (ATL)-[:WIN{Win:0}]->(P201513)
+CREATE (CLE)-[:WIN{Win:4}]->(P201513)
+CREATE (GS)-[:WIN{Win:4}]->(P201514)
+CREATE (HOU)-[:WIN{Win:1}]->(P201514)
+CREATE (CLE)-[:WIN{Win:2}]->(P201515)
+CREATE (GS)-[:WIN{Win:4}]->(P201515)
+CREATE (IND)-[:WIN{Win:4}]->(P201401)
+CREATE (ATL)-[:WIN{Win:3}]->(P201401)
+CREATE (CHI)-[:WIN{Win:1}]->(P201402)
+CREATE (WAS)-[:WIN{Win:4}]->(P201402)
+CREATE (TOR)-[:WIN{Win:3}]->(P201403)
+CREATE (BKN)-[:WIN{Win:4}]->(P201403)
+CREATE (MIA)-[:WIN{Win:4}]->(P201404)
+CREATE (CHA)-[:WIN{Win:0}]->(P201404)
+CREATE (SA)-[:WIN{Win:4}]->(P201405)
+CREATE (DAL)-[:WIN{Win:3}]->(P201405)
+CREATE (HOU)-[:WIN{Win:2}]->(P201406)
+CREATE (POR)-[:WIN{Win:4}]->(P201406)
+CREATE (LAC)-[:WIN{Win:4}]->(P201407)
+CREATE (GS)-[:WIN{Win:3}]->(P201407)
+CREATE (OKC)-[:WIN{Win:4}]->(P201408)
+CREATE (MEM)-[:WIN{Win:3}]->(P201408)
+CREATE (IND)-[:WIN{Win:4}]->(P201409)
+CREATE (WAS)-[:WIN{Win:2}]->(P201409)
+CREATE (BKN)-[:WIN{Win:1}]->(P201410)
+CREATE (MIA)-[:WIN{Win:4}]->(P201410)
+CREATE (SA)-[:WIN{Win:4}]->(P201411)
+CREATE (POR)-[:WIN{Win:1}]->(P201411)
+CREATE (LAC)-[:WIN{Win:2}]->(P201412)
+CREATE (OKC)-[:WIN{Win:4}]->(P201412)
+CREATE (IND)-[:WIN{Win:2}]->(P201413)
+CREATE (MIA)-[:WIN{Win:4}]->(P201413)
+CREATE (SA)-[:WIN{Win:4}]->(P201414)
+CREATE (OKC)-[:WIN{Win:2}]->(P201414)
+CREATE (MIA)-[:WIN{Win:1}]->(P201415)
+CREATE (SA)-[:WIN{Win:4}]->(P201415)
+CREATE (MIA)-[:WIN{Win:4}]->(P201301)
+CREATE (MIL)-[:WIN{Win:0}]->(P201301)
+CREATE (BKN)-[:WIN{Win:3}]->(P201302)
+CREATE (CHI)-[:WIN{Win:4}]->(P201302)
+CREATE (IND)-[:WIN{Win:4}]->(P201303)
+CREATE (ATL)-[:WIN{Win:2}]->(P201303)
+CREATE (NYK)-[:WIN{Win:4}]->(P201304)
+CREATE (BOS)-[:WIN{Win:2}]->(P201304)
+CREATE (OKC)-[:WIN{Win:4}]->(P201305)
+CREATE (HOU)-[:WIN{Win:2}]->(P201305)
+CREATE (LAC)-[:WIN{Win:2}]->(P201306)
+CREATE (MEM)-[:WIN{Win:4}]->(P201306)
+CREATE (DEN)-[:WIN{Win:2}]->(P201307)
+CREATE (GS)-[:WIN{Win:4}]->(P201307)
+CREATE (SA)-[:WIN{Win:4}]->(P201308)
+CREATE (LAL)-[:WIN{Win:0}]->(P201308)
+CREATE (MIA)-[:WIN{Win:4}]->(P201309)
+CREATE (CHI)-[:WIN{Win:1}]->(P201309)
+CREATE (IND)-[:WIN{Win:4}]->(P201310)
+CREATE (NYK)-[:WIN{Win:2}]->(P201310)
+CREATE (OKC)-[:WIN{Win:1}]->(P201311)
+CREATE (MEM)-[:WIN{Win:4}]->(P201311)
+CREATE (GS)-[:WIN{Win:2}]->(P201312)
+CREATE (SA)-[:WIN{Win:4}]->(P201312)
+CREATE (MIA)-[:WIN{Win:4}]->(P201313)
+CREATE (IND)-[:WIN{Win:3}]->(P201313)
+CREATE (MEM)-[:WIN{Win:0}]->(P201314)
+CREATE (SA)-[:WIN{Win:4}]->(P201314)
+CREATE (MIA)-[:WIN{Win:4}]->(P201315)
+CREATE (SA)-[:WIN{Win:3}]->(P201315)
+//<--end of creation-->
+MATCH (n) RETURN n
+//display the whole graph
+----
+//graph
+
+== NBA playoffs of a single year
+Display the entire 2015 playoff result.
+[source,cypher]
+----
+MATCH (t)-[]->(p:Playoff)
+WHERE p.Year = "2015"
+RETURN t,p
+----
+//graph
+
+== Historical playoffs of a team
+Display all historical playoffs of a single team.
+[source,cypher]
+----
+MATCH (t:Team {Name: "Golden State"})-[w:WIN]->(:Playoff)<-[l:WIN]-()
+RETURN t,w,l
+----
+//graph
+
+== Calculate winning percentage
+List all historical wins and losses of each team in the past 3 years.
+[source,cypher]
+----
+MATCH (t:Team)-[w:WIN]->(:Playoff)<-[l:WIN]-()
+RETURN t.Name as TEAM, SUM(w.Win) AS TOTAL_WIN, SUM(l.Win) as TOTAL_LOSS, 
+(toFloat(SUM(w.Win)) / (toFloat(SUM(w.Win))+ toFloat(SUM(l.Win)))) as WIN_PERCENTAGE
+ORDER BY SUM(w.Win) DESC
+----
+//table
+
+== If 2 teams have met before
+=== Display playoff history between 2 teams
+If two teams had played together before, the following query will list out all their matches.
+[source,cypher]
+----
+MATCH (t1:Team {Name: "Miami"})-[r1:WIN]->(p:Playoff)<-[r2:WIN]-(t2:Team {Name:"San Antonio"})
+RETURN t1,r1,p,r2,t2
+----
+//graph
+
+=== Calculate wins and losses
+For two teams that had played together before, their winning percentage could be used to predict the stronger team.
+[source,cypher]
+----
+MATCH (t1:Team {Name: "Miami"})-[r1:WIN]->(p:Playoff)<-[r2:WIN]-(t2:Team {Name:"San Antonio"})
+RETURN p.Year as Year,r1.Win as Miami,r2.Win as San_Antonio
+ORDER BY p.Year DESC
+----
+//table
+
+In the above case, San Antonio and Miami had played 12 games in the past 3 years during playoffs, and San Antonio won 7 & lost 5. 
+So San Antonio may have a slighly higher chance to win if they meet again in 2016 NBA final.
+
+== If 2 teams have never met before
+=== Simple Example
+Find all shortest paths beween 2 teams
+[source,cypher]
+----
+MATCH (t1:Team {Name: "Miami"}),(t2:Team {Name:"Portland"}),
+	p = AllshortestPaths((t1)-[*..14]-(t2))
+RETURN p
+----
+//graph
+
+[source,cypher]
+----
+MATCH p= AllShortestPaths((t1:Team {Name: "Miami"})-[:WIN*0..14]-(t2:Team {Name:"Portland"}))
+WITH extract(r IN relationships(p)| r.Win) AS RArray
+RETURN RArray
+----
+//table
+
+In the above case, one path [1,4,4,1] indicates the two teams may have an equal chance to win and but Miami shows a little bit advantage in the other [4,3,4,,1]. So we may say that Miami has a better chance to win Portland if they met in the finals.
+
+=== Complex Example
+Find all shortest paths between 2 teams
+[source,cypher]
+----
+MATCH (t1:Team {Name: "Golden State"}),(t2:Team {Name:"Toronto"}),
+	p = AllshortestPaths((t1)-[*..14]-(t2))
+RETURN p
+----
+//graph
+[source,cypher]
+----
+MATCH (t1:Team {Name: "Golden State"}),(t2:Team {Name:"Toronto"}),
+	p = AllshortestPaths((t1)-[r:WIN*..14]-(t2))
+WITH r,p,extract(r IN relationships(p)| r.Win ) AS paths
+RETURN paths
+----
+//table
+
+The above case is more complicated than the simple example: there are 6 shortest paths with 8 relations in each respectively. So I introduced a concept called _average net win_, which is the average net win of each path, where [net win] = [total number of wins] - [total number of losses] in one shortest path. When the average net win from team A to team B is positive, team A has a winning advantage over team B.
+ 
+[source,cypher]
+----
+MATCH p= AllShortestPaths((t1:Team {Name: "Golden State"})-[:WIN*0..14]-(t2:Team {Name:"Toronto"}))
+WITH extract(r IN relationships(p)| r.Win) AS RArray, LENGTH(p)-1  as s
+RETURN AVG(REDUCE(x = 0, a IN [i IN range(0,s) WHERE i % 2 = 0 | RArray[i] ] | x + a)) //total win
+- AVG(REDUCE(x = 0, a IN [i IN range(0,s) WHERE i % 2 <> 0 | RArray[i] ] | x + a)) //total loss
+AS NET_WIN
+----
+//table
+
+== Extension To Current Model
+The model depicted above simply uses raw numbers of wins and losses to suggest a Boolean result during comparison. If we want to rank more teams together or establish a more accurate quantifiable rating system, more elements could be introduced to the model - stadium, for instance, could help to incorporate the home court advantage into consideration during the analysis; or assign weights to different rounds in the playoffs, so number of net wins in the NBA Finals could have more significant influence than the ones in First Round during the calculation of average net wins along shortest paths.
+
